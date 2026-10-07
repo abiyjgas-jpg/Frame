@@ -1,133 +1,137 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { BindingManager, type BindingValues } from '../bindings/BindingManager'
-import { formatRange, parseRange } from '../bindings/range'
-import { LinkedChart } from '../presentation/LinkedChart'
-import { deserializeProject, FRAME_PROJECT_VERSION, serializeProject } from '../project/FrameProject'
+import { SplitPane } from '../components/SplitPane'
+import { createStarterProject } from '../demo/spikeProject'
+import { PresentationCanvas } from '../presentation/PresentationCanvas'
+import { SlideThumbnails } from '../presentation/SlideThumbnails'
+import type { Slide } from '../presentation/types'
+import { createBlankProject, type FrameProject } from '../project/FrameProject'
+import { loadFromBrowser, saveToBrowser } from '../project/persistence'
 import { UniverSpreadsheetAdapter } from '../spreadsheet/UniverSpreadsheetAdapter'
-import { initialWorkbook, SHEET_ID } from './initialWorkbook'
-
-const STORAGE_KEY = 'frame.spike.project'
-const CHART_BINDING = 'binding_chart'
-const KPI_BINDING = 'binding_kpi'
+import { ObjectBar } from './ObjectBar'
+import { TopBar } from './TopBar'
 
 declare global {
   interface Window {
-    __frame?: { adapter: UniverSpreadsheetAdapter; bindings: BindingManager; lastUpdateMs: number | null }
+    __frame?: { adapter: UniverSpreadsheetAdapter; bindings: BindingManager }
   }
 }
 
 export function App() {
-  const host = useRef<HTMLDivElement>(null)
+  const sheetHost = useRef<HTMLDivElement>(null)
   const adapter = useRef<UniverSpreadsheetAdapter | null>(null)
   const manager = useRef<BindingManager | null>(null)
+
+  const [name, setName] = useState('')
+  const [slides, setSlides] = useState<Slide[]>([])
+  const [bindingList, setBindingList] = useState<FrameProject['bindings']>([])
   const [values, setValues] = useState<BindingValues>(new Map())
+  const [activeSlideId, setActiveSlideId] = useState<string | null>(null)
+  const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null)
   const [status, setStatus] = useState('')
 
+  /** Puts a project into the workspace (initial load and New). */
+  const show = useCallback((p: FrameProject) => {
+    setName(p.metadata.name)
+    setSlides(p.slides)
+    setActiveSlideId(p.slides[0]?.id ?? null)
+    setSelectedObjectId(null)
+    manager.current!.load(p.bindings)
+    setBindingList(manager.current!.list())
+  }, [])
+
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY)
-    const project = saved ? deserializeProject(saved) : null
-    const a = new UniverSpreadsheetAdapter(host.current!, (project?.workbook ?? initialWorkbook) as any)
+    const project = loadFromBrowser() ?? createStarterProject()
+    const a = new UniverSpreadsheetAdapter(sheetHost.current!, project.workbook as any)
     const m = new BindingManager(a)
-    if (project) m.load(project.bindings)
-    else {
-      m.create('range-chart', { sheetId: SHEET_ID, range: 'A1:A3' }, { slideId: 'slide_1', objectId: 'chart_1' }, CHART_BINDING)
-      m.create('cell-kpi', { sheetId: SHEET_ID, range: 'A3' }, { slideId: 'slide_1', objectId: 'kpi_1' }, KPI_BINDING)
-    }
-    m.attach()
-    const unsub = m.subscribe((v) => setValues(v))
     adapter.current = a
     manager.current = m
-    window.__frame = { adapter: a, bindings: m, lastUpdateMs: null }
-    setStatus(project ? `Loaded snapshot saved ${project.metadata.savedAt}` : 'New workbook')
+    m.attach()
+    const unsub = m.subscribe(setValues)
+    show(project)
+    setStatus(project.metadata.savedAt ? 'Saved' : '')
+    window.__frame = { adapter: a, bindings: m }
     return () => {
       unsub()
       m.detach()
       a.dispose()
     }
-  }, [])
+  }, [show])
 
-  const save = () => {
-    const json = serializeProject({
-      version: FRAME_PROJECT_VERSION,
-      metadata: { name: 'Spike' },
+  const save = useCallback(() => {
+    saveToBrowser({
+      version: 1,
+      metadata: { name },
       workbook: adapter.current!.saveSnapshot(),
-      slides: [],
+      slides,
       bindings: manager.current!.list(),
       assets: [],
     })
-    localStorage.setItem(STORAGE_KEY, json)
-    setStatus(`Saved ${new Date().toLocaleTimeString()} (${(json.length / 1024).toFixed(1)} KB)`)
-  }
+    setStatus(`Saved ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`)
+  }, [name, slides])
 
-  const reloadSnapshot = () => {
-    const saved = localStorage.getItem(STORAGE_KEY)
-    if (!saved) return setStatus('Nothing saved yet')
-    const p = deserializeProject(saved)
-    manager.current!.detach()
+  const newProject = () => {
+    if (!window.confirm('Start a new project? Unsaved changes in this one will be lost.')) return
+    const p = createBlankProject()
     adapter.current!.loadSnapshot(p.workbook)
-    manager.current!.load(p.bindings)
-    manager.current!.attach()
-    setStatus(`Reloaded snapshot saved ${p.metadata.savedAt}`)
+    show(p)
+    setStatus('Not saved')
   }
 
-  const download = () => {
-    const saved = localStorage.getItem(STORAGE_KEY) ?? ''
-    const url = URL.createObjectURL(new Blob([saved], { type: 'application/json' }))
-    Object.assign(document.createElement('a'), { href: url, download: 'project.frame.json' }).click()
-    URL.revokeObjectURL(url)
-  }
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault()
+        save()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [save])
 
-  const reset = () => {
-    localStorage.removeItem(STORAGE_KEY)
-    location.reload()
-  }
-
-  const chartBinding = manager.current?.list().find((b) => b.id === CHART_BINDING)
-  const chartValues = values.get(CHART_BINDING) ?? []
-  const kpi = values.get(KPI_BINDING)?.[0]?.[0]
-  const rect = chartBinding ? parseRange(chartBinding.source.range) : null
-  const labels = rect
-    ? chartValues.flat().map((_, i) => formatRange({ ...rect, startRow: rect.startRow + i, endRow: rect.startRow + i }))
-    : []
+  const bindings = useMemo(() => new Map(bindingList.map((b) => [b.id, b])), [bindingList])
+  const activeSlide = slides.find((s) => s.id === activeSlideId)
+  const selected = activeSlide?.objects.find((o) => o.id === selectedObjectId)
 
   return (
     <div className="app">
-      <header className="topbar">
-        <strong>Frame</strong>
-        <span className="muted">Feasibility spike</span>
-        <div className="spacer" />
-        <span className="muted" data-testid="status">{status}</span>
-        <button onClick={save} data-testid="save">Save snapshot</button>
-        <button onClick={reloadSnapshot} data-testid="reload">Reload snapshot</button>
-        <button onClick={download}>Download .frame.json</button>
-        <button onClick={reset}>Reset</button>
-      </header>
-      <main className="body">
-        <section className="pane model">
-          <div ref={host} className="univer-host" />
-        </section>
-        <section className="pane presentation">
-          <div className="slide">
-            <h2>Spike chart</h2>
-            <div className="kpi" data-testid="kpi">
-              <span className="kpi-label">Total (A3)</span>
-              <span className="kpi-value">{typeof kpi === 'number' ? kpi.toLocaleString() : '—'}</span>
-            </div>
-            <LinkedChart values={chartValues} labels={labels} />
-            {chartBinding && (
-              <div className="source">
-                <span>SOURCE: Model!{chartBinding.source.range}</span>
-                <button
-                  data-testid="goto-source"
-                  onClick={() => adapter.current!.selectRange(chartBinding.source.sheetId, chartBinding.source.range)}
-                >
-                  Go to source
-                </button>
-              </div>
-            )}
-          </div>
-        </section>
-      </main>
+      <TopBar name={name} status={status} onRename={setName} onNew={newProject} onSave={save} />
+      <SplitPane
+        left={
+          <section className="pane-model" aria-label="Model">
+            <div ref={sheetHost} className="univer-host" />
+          </section>
+        }
+        right={
+          <section className="pane-presentation" aria-label="Presentation">
+            <ObjectBar
+              object={selected}
+              binding={selected?.bindingId ? bindings.get(selected.bindingId) : undefined}
+              slideNumber={slides.findIndex((s) => s.id === activeSlideId) + 1}
+              slideCount={slides.length}
+              sheetName={(id) => adapter.current?.getSheets().find((s) => s.id === id)?.name ?? id}
+              onGoToSource={(b) => adapter.current!.selectRange(b.source.sheetId, b.source.range)}
+            />
+            <PresentationCanvas
+              slide={activeSlide}
+              values={values}
+              bindings={bindings}
+              selectedObjectId={selectedObjectId}
+              onSelectObject={setSelectedObjectId}
+            />
+            <SlideThumbnails
+              slides={slides}
+              activeSlideId={activeSlideId}
+              values={values}
+              bindings={bindings}
+              onSelect={(id) => {
+                setActiveSlideId(id)
+                setSelectedObjectId(null)
+              }}
+            />
+          </section>
+        }
+      />
     </div>
   )
 }
