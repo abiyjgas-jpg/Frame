@@ -1,0 +1,21 @@
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body { font: 13px/1.4 Inter, -apple-system, "Segoe UI", system-ui, sans-serif; color: #1d2430; background: #f4f5f7; }
+.app { display: flex; flex-direction: column; height: 100%; }
+.topbar { display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 12px; background: #fff; border-bottom: 1px solid #dfe2e6; }
+.topbar .spacer { flex: 1; }
+.muted { color: #6b7380; }
+button { font: inherit; padding: 4px 10px; border: 1px solid #cfd4da; border-radius: 4px; background: #fff; cursor: pointer; }
+button:hover { background: #f1f3f5; }
+.body { flex: 1; display: grid; grid-template-columns: 1fr 1fr; min-height: 0; }
+.pane { min-width: 0; min-height: 0; position: relative; }
+.model { border-right: 1px solid #dfe2e6; background: #fff; }
+.univer-host { position: absolute; inset: 0; }
+.presentation { display: flex; align-items: center; justify-content: center; padding: 24px; }
+.slide { width: 100%; max-width: 720px; aspect-ratio: 16 / 9; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.08), 0 0 0 1px #e3e6ea; padding: 24px 28px; display: flex; flex-direction: column; gap: 8px; }
+.slide h2 { margin: 0; font-size: 18px; font-weight: 600; }
+.kpi { display: flex; align-items: baseline; gap: 8px; }
+.kpi-label { color: #6b7380; }
+.kpi-value { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.chart-box { position: relative; flex: 1; min-height: 0; }
+.source { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #6b7380; }
