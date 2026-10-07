@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { BarController, BarElement, CategoryScale, Chart, LinearScale } from 'chart.js'
-import type { CellValue } from '../spreadsheet/SpreadsheetAdapter'
+import type { CellValue } from '../../spreadsheet/SpreadsheetAdapter'
 
 Chart.register(BarController, BarElement, CategoryScale, LinearScale)
 
@@ -13,15 +13,15 @@ export function LinkedChart({ values, labels }: { values: CellValue[][]; labels:
   useEffect(() => {
     chart.current = new Chart(canvas.current!, {
       type: 'bar',
-      data: { labels: [], datasets: [{ data: [], backgroundColor: '#2f5d8a', borderRadius: 2, maxBarThickness: 64 }] },
+      data: { labels: [], datasets: [{ data: [], backgroundColor: '#2f5d8a', borderRadius: 2, maxBarThickness: 160 }] },
       options: {
         animation: false,
         responsive: true,
         maintainAspectRatio: false,
         plugins: { legend: { display: false } },
         scales: {
-          x: { grid: { display: false }, ticks: { color: '#5b6573', font: { size: 12 } } },
-          y: { beginAtZero: true, grid: { color: '#eceef1' }, border: { display: false }, ticks: { color: '#8a929c' } },
+          x: { grid: { display: false }, ticks: { color: '#5b6573', font: { size: 22 } } },
+          y: { beginAtZero: true, grid: { color: '#eceef1' }, border: { display: false }, ticks: { color: '#8a929c', font: { size: 20 } } },
         },
       },
     })
