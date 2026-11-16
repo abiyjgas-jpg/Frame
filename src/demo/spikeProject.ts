@@ -18,10 +18,12 @@ export function createStarterProject(): FrameProject {
           name: 'Model',
           rowCount: 1000,
           columnCount: 26,
+          // A1:A3 is the spike's test case; C1:F4 is the spec's model example for Add to Presentation.
           cellData: {
-            0: { 0: { v: 100 } },
-            1: { 0: { v: 200 } },
-            2: { 0: { f: '=SUM(A1:A2)' } },
+            0: { 0: { v: 100 }, 3: { v: 'FY26' }, 4: { v: 'FY27' }, 5: { v: 'FY28' } },
+            1: { 0: { v: 200 }, 2: { v: 'Enterprise' }, 3: { v: 60 }, 4: { v: 70 }, 5: { v: 82 } },
+            2: { 0: { f: '=SUM(A1:A2)' }, 2: { v: 'SMB' }, 3: { v: 40 }, 4: { v: 45 }, 5: { v: 49 } },
+            3: { 2: { v: 'Total' }, 3: { f: '=SUM(D2:D3)' }, 4: { f: '=SUM(E2:E3)' }, 5: { f: '=SUM(F2:F3)' } },
           },
         },
       },

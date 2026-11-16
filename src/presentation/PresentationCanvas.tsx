@@ -10,11 +10,13 @@ interface Props {
   values: BindingValues
   bindings: Map<string, Binding>
   selectedObjectId: string | null
+  linkedObjectIds: Set<string>
   onSelectObject(id: string | null): void
+  onDeleteSelected(): void
 }
 
 /** The editing surface: the active slide, scaled to fit the pane. */
-export function PresentationCanvas({ slide, values, bindings, selectedObjectId, onSelectObject }: Props) {
+export function PresentationCanvas({ slide, values, bindings, selectedObjectId, linkedObjectIds, onSelectObject, onDeleteSelected }: Props) {
   const host = useRef<HTMLDivElement>(null)
   const [scale, setScale] = useState(0.5)
 
@@ -26,7 +28,21 @@ export function PresentationCanvas({ slide, values, bindings, selectedObjectId, 
   }, [])
 
   return (
-    <div ref={host} className="canvas" onPointerDown={() => onSelectObject(null)}>
+    <div
+      ref={host}
+      className="canvas"
+      tabIndex={-1}
+      data-testid="canvas"
+      // Focus the canvas so Delete goes to slide objects, not to the sheet.
+      onPointerDownCapture={() => host.current!.focus({ preventScroll: true })}
+      onPointerDown={() => onSelectObject(null)}
+      onKeyDown={(e) => {
+        if ((e.key === 'Delete' || e.key === 'Backspace') && selectedObjectId) {
+          e.preventDefault()
+          onDeleteSelected()
+        }
+      }}
+    >
       {slide && (
         <Slide
           slide={slide}
@@ -34,6 +50,7 @@ export function PresentationCanvas({ slide, values, bindings, selectedObjectId, 
           values={values}
           bindings={bindings}
           selectedObjectId={selectedObjectId}
+          linkedObjectIds={linkedObjectIds}
           onSelectObject={onSelectObject}
         />
       )}

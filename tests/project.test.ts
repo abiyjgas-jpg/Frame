@@ -49,7 +49,7 @@ describe('project serialization', () => {
     const m = new BindingManager(sheet, (fn) => fn())
     m.load(deserializeProject(serializeProject(project)).bindings)
     m.attach()
-    expect(m.getValues('binding_001')).toEqual([[1], [2], [3]])
+    expect(m.getValues('binding_001')?.values).toEqual([[1], [2], [3]])
   })
 })
 

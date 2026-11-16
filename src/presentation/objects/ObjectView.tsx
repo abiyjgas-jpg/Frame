@@ -1,8 +1,11 @@
+import { useMemo } from 'react'
 import type { BindingValues } from '../../bindings/BindingManager'
-import { formatRange, parseRange } from '../../bindings/range'
+import { parseRange } from '../../bindings/range'
 import type { Binding } from '../../bindings/types'
+import { rangeToChartData } from '../chartData'
 import type { SlideObject } from '../types'
-import { LinkedChart } from './LinkedChart'
+import { LinkedChart, type ChartKind } from './LinkedChart'
+import { LinkedTable } from './LinkedTable'
 
 interface Props {
   object: SlideObject
@@ -10,15 +13,13 @@ interface Props {
   values: BindingValues
 }
 
-function formatNumber(v: unknown) {
-  if (typeof v === 'number') return v.toLocaleString(undefined, { maximumFractionDigits: 2 })
-  if (v === null || v === undefined || v === '') return '—'
-  return String(v)
-}
-
 /** Renders the inside of one slide object. Positioning/selection is the Slide's job. */
 export function ObjectView({ object, binding, values }: Props) {
   const data = object.bindingId ? values.get(object.bindingId) : undefined
+  const chartData = useMemo(
+    () => (object.type === 'chart' && binding && data ? rangeToChartData(data.values, parseRange(binding.source.range)) : null),
+    [object.type, binding, data],
+  )
   switch (object.type) {
     case 'text':
       return (
@@ -26,21 +27,19 @@ export function ObjectView({ object, binding, values }: Props) {
           {object.text}
         </div>
       )
-    case 'kpi':
+    case 'kpi': {
+      const text = data?.display[0]?.[0]
       return (
         <div className="obj-kpi">
           <div className="obj-kpi-label">{object.text}</div>
-          <div className="obj-kpi-value" data-testid={`kpi-${object.id}`}>{formatNumber(data?.[0]?.[0])}</div>
+          <div className="obj-kpi-value" data-testid={`kpi-${object.id}`}>{text ? text : '—'}</div>
         </div>
       )
-    case 'chart': {
-      const flat = data ?? []
-      const rect = binding ? parseRange(binding.source.range) : null
-      const labels = rect
-        ? flat.flat().map((_, i) => formatRange({ ...rect, startRow: rect.startRow + i, endRow: rect.startRow + i }))
-        : []
-      return <LinkedChart values={flat} labels={labels} />
     }
+    case 'chart':
+      return <LinkedChart data={chartData ?? { labels: [], series: [] }} kind={(object.style.chartType as ChartKind) ?? 'column'} />
+    case 'table':
+      return <LinkedTable data={data} />
     default:
       return <div className="obj-placeholder">{object.type}</div>
   }

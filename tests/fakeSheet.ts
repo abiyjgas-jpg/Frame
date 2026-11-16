@@ -1,5 +1,5 @@
 import { parseRange } from '../src/bindings/range'
-import type { CellValue, RangeChange, SpreadsheetAdapter } from '../src/spreadsheet/SpreadsheetAdapter'
+import type { CellValue, RangeChange, Selection, SpreadsheetAdapter } from '../src/spreadsheet/SpreadsheetAdapter'
 
 /** In-memory adapter for testing Frame logic without Univer. */
 export class FakeSheet implements SpreadsheetAdapter {
@@ -28,12 +28,19 @@ export class FakeSheet implements SpreadsheetAdapter {
     }
     return out
   }
+  getRangeDisplayValues(sheetId: string, range: string) {
+    return this.getRangeValues(sheetId, range).map((r) => r.map((v) => (v === null ? '' : String(v))))
+  }
+  selection: Selection | null = null
+  subscribeToSelection(_l: (s: Selection | null) => void) {
+    return () => {}
+  }
   subscribeToChanges(l: (c: RangeChange[]) => void) {
     this.listeners.add(l)
     return () => void this.listeners.delete(l)
   }
   getSheets() { return [{ id: 's1', name: 'Sheet1' }] }
-  getSelection() { return null }
+  getSelection() { return this.selection }
   activateSheet() {}
   selectRange() {}
   saveSnapshot() { return {} }

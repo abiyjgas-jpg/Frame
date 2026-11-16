@@ -2,6 +2,32 @@ import { expect, type Page } from '@playwright/test'
 
 // Cell centres in Univer's default grid at 1440x900 under Frame's 44px top bar.
 export const cell = (row: number) => ({ x: 90, y: 181 + row * 24 })
+const COL_X = [90, 178, 266, 354, 442, 530, 618]
+/** Centre of an A1 cell (columns A–G, rows 1–29) in the grid at its default scroll position. */
+export const at = (a1: string) => ({ x: COL_X[a1.charCodeAt(0) - 65], y: 181 + (Number(a1.slice(1)) - 1) * 24 })
+
+/** Selects a range by dragging in the sheet, retrying until Univer reports exactly that selection. */
+export async function selectCells(page: Page, from: string, to = from) {
+  await expect
+    .poll(async () => {
+      const a = at(from)
+      const b = at(to)
+      await page.mouse.move(a.x, a.y)
+      await page.mouse.down()
+      await page.mouse.move(b.x, b.y, { steps: 4 })
+      await page.mouse.up()
+      return page.evaluate(() => window.__frame?.adapter.getSelection()?.range)
+    })
+    .toBe(from === to ? from : `${from}:${to}`)
+}
+
+/** Types a value into any cell (A–G) and commits it. */
+export async function typeInto(page: Page, a1: string, text: string) {
+  await selectCells(page, 'G20') // prove clicks land before targeting
+  await selectCells(page, a1)
+  await page.keyboard.type(text)
+  await page.keyboard.press('Enter')
+}
 
 export const canvasChart = (page: Page) => page.locator('[data-testid=slide] [data-testid=linked-chart]')
 export const chartValues = async (page: Page) => JSON.parse((await canvasChart(page).getAttribute('data-values'))!)

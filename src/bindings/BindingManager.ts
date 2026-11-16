@@ -2,7 +2,13 @@ import type { CellValue, RangeChange, SpreadsheetAdapter } from '../spreadsheet/
 import { intersects, parseRange } from './range'
 import type { Binding, BindingType } from './types'
 
-export type BindingValues = Map<string, CellValue[][]>
+/** A binding's current source data: raw values (for charts) and formatted text (for KPIs and tables). */
+export interface ResolvedRange {
+  values: CellValue[][]
+  display: string[][]
+}
+
+export type BindingValues = Map<string, ResolvedRange>
 type Listener = (values: BindingValues) => void
 
 let counter = 0
@@ -113,11 +119,14 @@ export class BindingManager {
     for (const id of ids) {
       const b = this.bindings.get(id)
       if (!b) continue
-      let next: CellValue[][]
+      let next: ResolvedRange
       try {
-        next = this.sheet.getRangeValues(b.source.sheetId, b.source.range)
+        next = {
+          values: this.sheet.getRangeValues(b.source.sheetId, b.source.range),
+          display: this.sheet.getRangeDisplayValues(b.source.sheetId, b.source.range),
+        }
       } catch {
-        next = [] // source sheet missing: render empty rather than crash
+        next = { values: [], display: [] } // source sheet missing: render empty rather than crash
       }
       if (JSON.stringify(next) !== JSON.stringify(this.values.get(id))) {
         this.values.set(id, next)

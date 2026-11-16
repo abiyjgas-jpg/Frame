@@ -9,13 +9,15 @@ interface Props {
   values: BindingValues
   bindings: Map<string, Binding>
   selectedObjectId?: string | null
+  /** Objects linked to the cells currently selected in the model. */
+  linkedObjectIds?: Set<string>
   onSelectObject?(id: string | null): void
   /** Thumbnails are not interactive. */
   interactive?: boolean
 }
 
 /** One slide at logical 1280×720, scaled with a CSS transform so object coordinates never change. */
-export function Slide({ slide, scale, values, bindings, selectedObjectId, onSelectObject, interactive = true }: Props) {
+export function Slide({ slide, scale, values, bindings, selectedObjectId, linkedObjectIds, onSelectObject, interactive = true }: Props) {
   return (
     <div className="slide-frame" style={{ width: SLIDE_WIDTH * scale, height: SLIDE_HEIGHT * scale }}>
       <div
@@ -27,7 +29,11 @@ export function Slide({ slide, scale, values, bindings, selectedObjectId, onSele
         {slide.objects.map((o) => (
           <div
             key={o.id}
-            className={`slide-object ${interactive && o.id === selectedObjectId ? 'is-selected' : ''}`}
+            className={[
+              'slide-object',
+              interactive && o.id === selectedObjectId ? 'is-selected' : '',
+              linkedObjectIds?.has(o.id) ? 'is-linked' : '',
+            ].join(' ')}
             data-testid={interactive ? `object-${o.id}` : undefined}
             style={{ left: o.x, top: o.y, width: o.width, height: o.height }}
             onPointerDown={
