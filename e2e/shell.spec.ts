@@ -47,10 +47,10 @@ test('divider resizes both panes, keeps the sheet usable, and is remembered', as
 
 test('thumbnails switch slides and stay live', async ({ page }) => {
   await expect(page.getByTestId('thumb-slide-1')).toHaveAttribute('aria-current', 'true')
-  await expect(page.getByTestId('objectbar')).toHaveText('Slide 1 of 2')
+  await expect(page.getByTestId('objectbar-context')).toHaveText(/^Slide 1 of 2/)
   await openSlide(page, 'slide-2')
   await expect(page.getByTestId('thumb-slide-2')).toHaveAttribute('aria-current', 'true')
-  await expect(page.getByTestId('objectbar')).toHaveText('Slide 2 of 2')
+  await expect(page.getByTestId('objectbar-context')).toHaveText(/^Slide 2 of 2/)
   await expect(canvasChart(page)).toBeVisible()
 
   // The thumbnail's chart updates too.
@@ -71,7 +71,7 @@ test('selecting a linked object shows its source and Go to source selects it', a
 
   // Clicking empty canvas clears the selection.
   await page.mouse.click(1100, 150)
-  await expect(page.getByTestId('objectbar')).toHaveText('Slide 2 of 2')
+  await expect(page.getByTestId('objectbar-context')).toHaveText(/^Slide 2 of 2/)
 })
 
 test('Save keeps name, workbook, slides and bindings across a reload; New starts blank', async ({ page }) => {

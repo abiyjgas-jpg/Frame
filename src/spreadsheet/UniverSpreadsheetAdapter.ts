@@ -2,9 +2,17 @@ import { UniverSheetsCorePreset } from '@univerjs/preset-sheets-core'
 import UniverPresetSheetsCoreEnUS from '@univerjs/preset-sheets-core/locales/en-US'
 import { createUniver, LocaleType, mergeLocales } from '@univerjs/presets'
 import '@univerjs/preset-sheets-core/lib/index.css'
-import type { CellValue, RangeChange, SheetInfo, SpreadsheetAdapter } from './SpreadsheetAdapter'
+import type { CellValue, RangeChange, Selection, SheetInfo, SpreadsheetAdapter } from './SpreadsheetAdapter'
 
 type UniverAPI = ReturnType<typeof createUniver>['univerAPI']
+
+/**
+ * Every edit is followed by a formula pass (even when nothing depends on the cell), which writes its
+ * results as a second change. Holding edits until that pass ends means linked objects update once,
+ * with consistent totals, instead of briefly showing a new input next to a stale total.
+ * If no pass arrives (e.g. a style-only change), held changes are released after this long.
+ */
+const MAX_HOLD_MS = 400
 type IWorkbookData = Parameters<UniverAPI['createWorkbook']>[0]
 
 /** All Univer-specific code lives in this file. */
@@ -12,7 +20,10 @@ export class UniverSpreadsheetAdapter implements SpreadsheetAdapter {
   private univer: ReturnType<typeof createUniver>['univer']
   private api: UniverAPI
   private listeners = new Set<(changes: RangeChange[]) => void>()
+  private selectionListeners = new Set<(s: Selection | null) => void>()
   private disposables: { dispose(): void }[] = []
+  private held: RangeChange[] = []
+  private holdTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor(container: HTMLElement, snapshot: IWorkbookData) {
     const { univer, univerAPI } = createUniver({
@@ -32,7 +43,17 @@ export class UniverSpreadsheetAdapter implements SpreadsheetAdapter {
           const id = r.getSheetId()
           bySheet.set(id, [...(bySheet.get(id) ?? []), r.getA1Notation()])
         }
-        this.emit([...bySheet].map(([sheetId, ranges]) => ({ sheetId, ranges })))
+        this.hold([...bySheet].map(([sheetId, ranges]) => ({ sheetId, ranges })))
+      }),
+    )
+    this.disposables.push(this.api.getFormula().calculationEnd(() => this.release()))
+    this.disposables.push(
+      // The SelectionChanged facade event does not fire for pointer selection in 1.0.3; the
+      // set-selections operation does (mouse, keyboard and selectRange), and survives workbook reloads.
+      this.api.addEvent(this.api.Event.CommandExecuted, ({ id }) => {
+        if (id !== 'sheet.operation.set-selections') return
+        const sel = this.getSelection()
+        for (const l of this.selectionListeners) l(sel)
       }),
     )
     // Recalculated formula results. Dependants are not reported precisely, so signal "whole sheet".
@@ -45,6 +66,19 @@ export class UniverSpreadsheetAdapter implements SpreadsheetAdapter {
         if (changes.length) this.emit(changes)
       }),
     )
+  }
+
+  private hold(changes: RangeChange[]) {
+    this.held.push(...changes)
+    this.holdTimer ??= setTimeout(() => this.release(), MAX_HOLD_MS)
+  }
+
+  private release() {
+    if (this.holdTimer) clearTimeout(this.holdTimer)
+    this.holdTimer = null
+    const changes = this.held
+    this.held = []
+    if (changes.length) this.emit(changes)
   }
 
   private emit(changes: RangeChange[]) {
@@ -71,6 +105,15 @@ export class UniverSpreadsheetAdapter implements SpreadsheetAdapter {
     return this.sheet(sheetId).getRange(range).getValues() as CellValue[][]
   }
 
+  getRangeDisplayValues(sheetId: string, range: string): string[][] {
+    return this.sheet(sheetId).getRange(range).getDisplayValues()
+  }
+
+  subscribeToSelection(listener: (s: Selection | null) => void) {
+    this.selectionListeners.add(listener)
+    return () => void this.selectionListeners.delete(listener)
+  }
+
   subscribeToChanges(listener: (changes: RangeChange[]) => void) {
     this.listeners.add(listener)
     return () => void this.listeners.delete(listener)
@@ -80,8 +123,8 @@ export class UniverSpreadsheetAdapter implements SpreadsheetAdapter {
     return this.wb().getSheets().map((s) => ({ id: s.getSheetId(), name: s.getSheetName() }))
   }
 
-  getSelection() {
-    const r = this.wb().getActiveRange()
+  getSelection(): Selection | null {
+    const r = this.api.getActiveWorkbook()?.getActiveRange()
     return r ? { sheetId: r.getSheetId(), range: r.getA1Notation() } : null
   }
 
@@ -105,8 +148,10 @@ export class UniverSpreadsheetAdapter implements SpreadsheetAdapter {
   }
 
   dispose() {
+    if (this.holdTimer) clearTimeout(this.holdTimer)
     this.disposables.forEach((d) => d.dispose())
     this.listeners.clear()
+    this.selectionListeners.clear()
     this.univer.dispose()
   }
 }

@@ -12,7 +12,7 @@ test('editing A2 recalculates A3 and updates the chart without a refresh', async
   const latencies: number[] = []
   for (const v of [250, 50, 1000, 200, 7, 640, 333, 90]) {
     latencies.push(await editCell(page, 1, String(v), [100, v, 100 + v]))
-    await expect(page.getByTestId('slide').getByTestId('kpi-kpi-1')).toHaveText((100 + v).toLocaleString())
+    await expect(page.getByTestId('slide').getByTestId('kpi-kpi-1')).toHaveText(String(100 + v)) // the sheet's own display text
   }
   const sorted = [...latencies].sort((a, b) => a - b)
   const median = sorted[Math.floor(sorted.length / 2)]
@@ -20,6 +20,19 @@ test('editing A2 recalculates A3 and updates the chart without a refresh', async
   // Target is <250 ms perceived. Median is asserted strictly; max gets headroom for noisy headless CI machines.
   expect(median).toBeLessThan(250)
   expect(sorted.at(-1)!).toBeLessThan(400)
+})
+
+test('an edit reaches the slide once, never as a new input next to a stale total', async ({ page }) => {
+  await page.evaluate(() => {
+    const el = document.querySelector('[data-testid=slide] [data-testid=linked-chart]')!
+    const w = window as any
+    w.__frames = [el.getAttribute('data-values')]
+    new MutationObserver(() => w.__frames.push(el.getAttribute('data-values'))).observe(el, { attributes: true })
+  })
+  await editCell(page, 1, '250', [100, 250, 350])
+  await editCell(page, 1, '40', [100, 40, 140])
+  await page.waitForTimeout(600) // let the trailing formula notification arrive, if any
+  expect(await page.evaluate(() => (window as any).__frames)).toEqual(['[100,200,300]', '[100,250,350]', '[100,40,140]'])
 })
 
 test('editing A1 (the literal spec case) updates the bound chart', async ({ page }) => {

@@ -2,7 +2,7 @@
 
 One workspace for spreadsheet analysis and the presentation built from it, with slides live-linked to the model.
 
-Status: Frame shell (Days 4–7). See `docs/` for the spike plan, spike results and milestone notes.
+Status: bindings (Days 8–14), stacked on the shell (Days 4–7). See `docs/` for the spike plan, spike results and milestone notes.
 
 ```
 npm install
@@ -12,4 +12,4 @@ npm test                             # unit tests
 npm run e2e                          # browser tests (builds and serves the production build)
 ```
 
-Try it: open slide 2, click A2 in the sheet, type a number, press Enter. The chart, the Total KPI and the slide thumbnail update. Click the chart to see its source, then Go to source.
+Try it: select C1:F4 in the sheet and click Chart (or Table) in the bar above the slide. Then change E2 from 70 to 65: the chart, table and slide thumbnail update. Select E2 to see which slide objects read it; click an object, then Go to source.

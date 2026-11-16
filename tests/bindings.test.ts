@@ -20,7 +20,8 @@ describe('BindingManager', () => {
   it('creates a binding and resolves its values immediately', () => {
     const b = m.create('range-chart', { sheetId: 's1', range: 'A1:A3' }, target)
     expect(m.list()).toEqual([b])
-    expect(m.getValues(b.id)).toEqual([[100], [200], [300]])
+    expect(m.getValues(b.id)?.values).toEqual([[100], [200], [300]])
+    expect(m.getValues(b.id)?.display).toEqual([['100'], ['200'], ['300']])
   })
 
   it('rejects invalid ranges and multi-cell KPIs', () => {
@@ -40,10 +41,10 @@ describe('BindingManager', () => {
   it('updates linked objects when an intersecting range changes', () => {
     const b = m.create('range-chart', { sheetId: 's1', range: 'A1:A3' }, target)
     const seen: unknown[] = []
-    m.subscribe((v) => seen.push(v.get(b.id)))
+    m.subscribe((v) => seen.push(v.get(b.id)?.values))
     sheet.set('s1', 1, 0, 250)
     sheet.fire([{ sheetId: 's1', ranges: ['A2'] }])
-    expect(m.getValues(b.id)).toEqual([[100], [250], [300]])
+    expect(m.getValues(b.id)?.values).toEqual([[100], [250], [300]])
     expect(seen.at(-1)).toEqual([[100], [250], [300]])
   })
 
@@ -84,7 +85,7 @@ describe('BindingManager', () => {
 
   it('renders an empty value when the source sheet is missing', () => {
     const b = m.create('range-chart', { sheetId: 'missing', range: 'A1' }, target)
-    expect(m.getValues(b.id)).toEqual([])
+    expect(m.getValues(b.id)?.values).toEqual([])
   })
 
   it('reports which bindings read a selected range', () => {
@@ -98,6 +99,6 @@ describe('BindingManager', () => {
     m.detach()
     sheet.set('s1', 0, 0, 1)
     sheet.fire([{ sheetId: 's1', ranges: ['A1'] }])
-    expect(m.getValues(b.id)).toEqual([[100]])
+    expect(m.getValues(b.id)?.values).toEqual([[100]])
   })
 })

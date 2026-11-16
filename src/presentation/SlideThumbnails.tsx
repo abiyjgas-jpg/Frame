@@ -11,11 +11,12 @@ interface Props {
   activeSlideId: string | null
   values: BindingValues
   bindings: Map<string, Binding>
+  linkedObjectIds: Set<string>
   onSelect(id: string): void
 }
 
 /** Bottom strip of live slide thumbnails, mirroring the sheet tabs under the model. */
-export function SlideThumbnails({ slides, activeSlideId, values: liveValues, bindings, onSelect }: Props) {
+export function SlideThumbnails({ slides, activeSlideId, values: liveValues, bindings, linkedObjectIds, onSelect }: Props) {
   // Thumbnails repaint after the main canvas, so they never slow down the update the user is watching.
   const values = useDeferredValue(liveValues)
   return (
@@ -23,7 +24,7 @@ export function SlideThumbnails({ slides, activeSlideId, values: liveValues, bin
       {slides.map((s, i) => (
         <button
           key={s.id}
-          className={`thumb ${s.id === activeSlideId ? 'is-active' : ''}`}
+          className={`thumb ${s.id === activeSlideId ? 'is-active' : ''} ${s.objects.some((o) => linkedObjectIds.has(o.id)) ? 'is-linked' : ''}`}
           data-testid={`thumb-${s.id}`}
           aria-current={s.id === activeSlideId}
           title={s.title || `Slide ${i + 1}`}
