@@ -27,6 +27,8 @@ export interface SpreadsheetAdapter {
   getRangeDisplayValues(sheetId: string, range: string): string[][]
   /** Called after edits and after formula recalculation has been applied. Returns an unsubscribe fn. */
   subscribeToChanges(listener: (changes: RangeChange[]) => void): () => void
+  /** Called when the user changes the workbook (values, formats, structure, undo). Not on load. */
+  subscribeToEdits(listener: () => void): () => void
   getSheets(): SheetInfo[]
   getSelection(): Selection | null
   subscribeToSelection(listener: (selection: Selection | null) => void): () => void

@@ -23,10 +23,12 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--select
 .topbar { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 12px; background: var(--panel); border-bottom: 1px solid var(--border); flex: none; }
 .wordmark { font-weight: 650; letter-spacing: -0.01em; font-size: 14px; }
 .topbar-sep { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }
-.project-name { font: inherit; font-weight: 500; border: 1px solid transparent; border-radius: 4px; padding: 4px 6px; width: 260px; background: transparent; color: var(--text); }
+.project-name { font: inherit; font-weight: 500; border: 1px solid transparent; border-radius: 4px; padding: 4px 6px; width: 220px; background: transparent; color: var(--text); }
 .project-name:hover { border-color: var(--border); }
 .project-name:focus { border-color: var(--select); outline: none; background: #fff; }
 .topbar-status { color: var(--muted); font-size: 12px; }
+.topbar-file { color: var(--muted); font-size: 12px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topbar-dirty { font-size: 12px; color: #9a5b00; background: #fff4e0; border-radius: 10px; padding: 2px 8px; white-space: nowrap; }
 .spacer { flex: 1; }
 .btn-group { display: flex; }
 .btn-group button { border-radius: 0; margin-left: -1px; }

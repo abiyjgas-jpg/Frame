@@ -39,6 +39,9 @@ export class FakeSheet implements SpreadsheetAdapter {
     this.listeners.add(l)
     return () => void this.listeners.delete(l)
   }
+  subscribeToEdits(_l: () => void) {
+    return () => {}
+  }
   getSheets() { return [{ id: 's1', name: 'Sheet1' }] }
   getSelection() { return this.selection }
   activateSheet() {}

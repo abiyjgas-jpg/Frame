@@ -32,7 +32,48 @@ export async function typeInto(page: Page, a1: string, text: string) {
 export const canvasChart = (page: Page) => page.locator('[data-testid=slide] [data-testid=linked-chart]')
 export const chartValues = async (page: Page) => JSON.parse((await canvasChart(page).getAttribute('data-values'))!)
 
+/**
+ * Stands in for the File System Access pickers (which Playwright can't drive) with an in-memory
+ * "disk" kept in sessionStorage, so files survive reloads within a test. Tests can steer it with
+ * window.__nextSaveName / __nextOpenName and read window.__pickerCalls; deleting
+ * window.showSaveFilePicker / showOpenFilePicker switches the app to its download/upload fallback.
+ */
+function installFakeDisk() {
+  const w = window as any
+  w.__pickerCalls = 0
+  const read = (n: string) => sessionStorage.getItem('disk:' + n)
+  const handle = (name: string) => ({
+    name,
+    async createWritable() {
+      let buf = ''
+      return { write: async (d: string) => void (buf += d), close: async () => sessionStorage.setItem('disk:' + name, buf) }
+    },
+    async getFile() {
+      return { name, text: async () => read(name) ?? '' }
+    },
+  })
+  w.__readFile = read
+  w.showSaveFilePicker = async (o: { suggestedName: string }) => {
+    w.__pickerCalls++
+    const name = w.__nextSaveName ?? o.suggestedName
+    w.__nextSaveName = undefined
+    return handle(name)
+  }
+  w.showOpenFilePicker = async () => {
+    const name = w.__nextOpenName
+    w.__nextOpenName = undefined
+    if (!name) throw Object.assign(new Error('cancelled'), { name: 'AbortError' })
+    return [handle(name)]
+  }
+}
+
+const withDisk = new WeakSet<Page>()
+
 export async function freshStart(page: Page) {
+  if (!withDisk.has(page)) {
+    withDisk.add(page)
+    await page.addInitScript(installFakeDisk)
+  }
   await page.goto('/')
   await page.evaluate(() => localStorage.clear())
   await page.reload()

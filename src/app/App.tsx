@@ -19,14 +19,29 @@ import { PresentationCanvas } from '../presentation/PresentationCanvas'
 import { PresentMode } from '../presentation/PresentMode'
 import { SlideThumbnails } from '../presentation/SlideThumbnails'
 import type { Asset, Slide, SlideObject } from '../presentation/types'
-import { createBlankProject, FRAME_PROJECT_VERSION, type FrameProject } from '../project/FrameProject'
-import { loadFromBrowser, saveToBrowser } from '../project/persistence'
+import { createBlankProject, deserializeProject, FRAME_PROJECT_VERSION, serializeProject, type FrameProject } from '../project/FrameProject'
+import { browserFileEnv, openProjectFile, saveProjectFile, type ProjectFile } from '../project/fileAccess'
+import { loadWorkspace, saveWorkspace } from '../project/persistence'
 import type { Selection } from '../spreadsheet/SpreadsheetAdapter'
 import { UniverSpreadsheetAdapter } from '../spreadsheet/UniverSpreadsheetAdapter'
 import { readImageFile } from './images'
 import { ObjectBar } from './ObjectBar'
 import { SlideBar } from './SlideBar'
 import { TopBar } from './TopBar'
+
+/** What the project looked like when it was last opened or saved; any difference is unsaved work. */
+interface CleanState {
+  name: string
+  slides: Slide[]
+  assets: Asset[]
+  bindings: Binding[]
+  sheetRev: number
+  /** Restored from the browser with changes that never reached a file. */
+  dirty: boolean
+}
+
+const clock = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+const AUTOSAVE_DELAY_MS = 500
 
 declare global {
   interface Window {
@@ -50,11 +65,27 @@ export function App() {
   const [presenting, setPresenting] = useState(false)
   const [status, setStatus] = useState('')
   const [sheetSelection, setSheetSelection] = useState<Selection | null>(null)
+  const [file, setFile] = useState<ProjectFile | null>(null)
+  const [sheetRev, setSheetRev] = useState(0)
+  const [clean, setClean] = useState<CleanState | null>(null)
+  /** False when the browser copy could not be written (storage full), so leaving would lose work. */
+  const [workspaceSafe, setWorkspaceSafe] = useState(true)
   const slidesRef = useRef(slides)
   slidesRef.current = slides
+  const sheetRevRef = useRef(sheetRev)
+  sheetRevRef.current = sheetRev
 
-  /** Puts a project into the workspace (initial load and New). */
-  const show = useCallback((p: FrameProject) => {
+  const dirty =
+    !!clean &&
+    (clean.dirty ||
+      clean.name !== name ||
+      clean.slides !== slides ||
+      clean.assets !== assets ||
+      clean.bindings !== bindingList ||
+      clean.sheetRev !== sheetRev)
+
+  /** Puts a project into the workspace (initial load, New and Open). */
+  const show = useCallback((p: FrameProject, opts: { file: ProjectFile | null; dirty: boolean }) => {
     setName(p.metadata.name)
     setSlides(p.slides)
     setAssets(p.assets)
@@ -62,11 +93,15 @@ export function App() {
     setSelectedObjectId(null)
     setEditingTextId(null)
     manager.current!.load(p.bindings)
-    setBindingList(manager.current!.list())
+    const bindings = manager.current!.list()
+    setBindingList(bindings)
+    setFile(opts.file)
+    setClean({ name: p.metadata.name, slides: p.slides, assets: p.assets, bindings, sheetRev: sheetRevRef.current, dirty: opts.dirty })
   }, [])
 
   useEffect(() => {
-    const project = loadFromBrowser() ?? createStarterProject()
+    const restored = loadWorkspace()
+    const project = restored?.project ?? createStarterProject()
     const a = new UniverSpreadsheetAdapter(sheetHost.current!, project.workbook as any)
     const m = new BindingManager(a)
     adapter.current = a
@@ -74,42 +109,134 @@ export function App() {
     m.attach()
     const unsub = m.subscribe(setValues)
     const unsubSel = a.subscribeToSelection(setSheetSelection)
-    show(project)
-    setStatus(project.metadata.savedAt ? 'Saved' : '')
+    const unsubEdits = a.subscribeToEdits(() => setSheetRev((r) => r + 1))
+    show(project, { file: restored?.fileName ? { name: restored.fileName } : null, dirty: restored?.dirty ?? false })
     window.__frame = { adapter: a, bindings: m, slides: () => slidesRef.current }
     return () => {
       unsub()
       unsubSel()
+      unsubEdits()
       m.detach()
       a.dispose()
     }
   }, [show])
 
-  const save = useCallback(() => {
-    // Only keep images still used on a slide.
+  /** The open project as it would be written to a file. Only images still on a slide are kept. */
+  const currentProject = (): FrameProject => {
     const used = new Set(slides.flatMap((s) => s.objects.map((o) => o.assetId)))
+    return {
+      version: FRAME_PROJECT_VERSION,
+      metadata: { name },
+      workbook: adapter.current!.saveSnapshot(),
+      slides,
+      bindings: manager.current!.list(),
+      assets: assets.filter((x) => used.has(x.id)),
+    }
+  }
+
+  // --- browser copy (autosave) ------------------------------------------------------------------
+  const writeWorkspace = () => {
+    if (!adapter.current || !clean) return
     try {
-      saveToBrowser({
-        version: FRAME_PROJECT_VERSION,
-        metadata: { name },
-        workbook: adapter.current!.saveSnapshot(),
-        slides,
-        bindings: manager.current!.list(),
-        assets: assets.filter((x) => used.has(x.id)),
-      })
-      setStatus(`Saved ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`)
+      saveWorkspace({ project: currentProject(), dirty, fileName: file?.name ?? null })
+      setWorkspaceSafe(true)
+    } catch (e) {
+      console.error('Autosave failed', e)
+      setWorkspaceSafe(false)
+    }
+  }
+  const writeWorkspaceRef = useRef(writeWorkspace)
+  writeWorkspaceRef.current = writeWorkspace
+
+  useEffect(() => {
+    const t = setTimeout(() => writeWorkspaceRef.current(), AUTOSAVE_DELAY_MS)
+    return () => clearTimeout(t)
+  }, [name, slides, assets, bindingList, sheetRev, dirty, file])
+
+  const dirtyRef = useRef(dirty)
+  dirtyRef.current = dirty
+  const workspaceSafeRef = useRef(workspaceSafe)
+  workspaceSafeRef.current = workspaceSafe
+  useEffect(() => {
+    const flush = () => writeWorkspaceRef.current()
+    // The browser copy normally makes leaving safe; warn only when it could not be written.
+    const guard = (e: BeforeUnloadEvent) => {
+      flush()
+      if (dirtyRef.current && !workspaceSafeRef.current) e.preventDefault()
+    }
+    window.addEventListener('pagehide', flush)
+    window.addEventListener('beforeunload', guard)
+    return () => {
+      window.removeEventListener('pagehide', flush)
+      window.removeEventListener('beforeunload', guard)
+    }
+  }, [])
+
+  useEffect(() => {
+    document.title = `${dirty ? '• ' : ''}${name || 'Untitled'} – Frame`
+  }, [name, dirty])
+
+  // --- project files ----------------------------------------------------------------------------
+  const busy = useRef(false)
+
+  const save = async (saveAs = false) => {
+    if (busy.current || !clean) return
+    busy.current = true
+    try {
+      const project = currentProject()
+      const snapshot: CleanState = { name, slides, assets, bindings: bindingList, sheetRev, dirty: false }
+      const saved = await saveProjectFile(browserFileEnv(), serializeProject(project), name, file, saveAs)
+      if (!saved) return
+      setFile(saved)
+      setClean(snapshot)
+      setStatus(`Saved to ${saved.name} at ${clock()}`)
     } catch (e) {
       console.error(e)
-      setStatus('Not saved: browser storage is full (large images?)')
+      setStatus(`Not saved: ${(e as Error).message || 'the file could not be written'}`)
+    } finally {
+      busy.current = false
     }
-  }, [name, slides, assets])
+  }
+
+  const open = async () => {
+    if (busy.current) return
+    busy.current = true
+    try {
+      const picked = await openProjectFile(browserFileEnv())
+      if (!picked) return
+      let project: FrameProject
+      try {
+        project = deserializeProject(picked.text)
+      } catch (e) {
+        window.alert(`Couldn't open ${picked.file.name}: ${(e as Error).message}`)
+        return
+      }
+      if (dirtyRef.current && !window.confirm(`Open ${picked.file.name}? Unsaved changes in this project will be lost.`)) return
+      const previous = adapter.current!.saveSnapshot()
+      try {
+        adapter.current!.loadSnapshot(project.workbook)
+      } catch (e) {
+        console.error(e)
+        adapter.current!.loadSnapshot(previous)
+        window.alert(`Couldn't open ${picked.file.name}: its workbook could not be loaded.`)
+        return
+      }
+      show(project, { file: picked.file, dirty: false })
+      setStatus(`Opened ${picked.file.name}`)
+    } catch (e) {
+      console.error(e)
+      setStatus(`Couldn't open the file: ${(e as Error).message}`)
+    } finally {
+      busy.current = false
+    }
+  }
 
   const newProject = () => {
-    if (!window.confirm('Start a new project? Unsaved changes in this one will be lost.')) return
+    if (dirty && !window.confirm('Start a new project? Unsaved changes in this one will be lost.')) return
     const p = createBlankProject()
     adapter.current!.loadSnapshot(p.workbook)
-    show(p)
-    setStatus('Not saved')
+    show(p, { file: null, dirty: false })
+    setStatus('New project')
   }
 
   // --- bindings kept in step with slide edits -------------------------------------------------
@@ -238,16 +365,24 @@ export function App() {
 
   const sheetName = (id: string) => adapter.current?.getSheets().find((s) => s.id === id)?.name ?? id
 
+  const fileCommands = useRef({ save, open })
+  fileCommands.current = { save, open }
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return
+      const key = e.key.toLowerCase()
+      if (key === 's') {
         e.preventDefault()
-        save()
+        void fileCommands.current.save(e.shiftKey)
+      } else if (key === 'o' && !e.shiftKey) {
+        e.preventDefault()
+        void fileCommands.current.open()
       }
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [save])
+    // Capture phase, so the sheet editor can't swallow the shortcuts.
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [])
 
   const bindingMap = useMemo(() => new Map(bindingList.map((b) => [b.id, b])), [bindingList])
   const assetMap = useMemo(() => new Map(assets.map((a) => [a.id, a])), [assets])
@@ -267,7 +402,18 @@ export function App() {
 
   return (
     <div className="app">
-      <TopBar name={name} status={status} onRename={setName} onNew={newProject} onSave={save} onPresent={() => setPresenting(true)} />
+      <TopBar
+        name={name}
+        status={status}
+        dirty={dirty}
+        fileName={file?.name ?? null}
+        onRename={setName}
+        onNew={newProject}
+        onOpen={() => void open()}
+        onSave={() => void save(false)}
+        onSaveAs={() => void save(true)}
+        onPresent={() => setPresenting(true)}
+      />
       <SplitPane
         left={
           <section className="pane-model" aria-label="Model">
