@@ -99,3 +99,41 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--select
 .btn-quiet:hover:not(:disabled) { border-color: var(--border); color: #b42318; }
 .slide-object.is-linked:not(.is-selected) { outline: 3px dashed #d08a2b; outline-offset: 2px; }
 .thumb.is-linked::after { content: ""; position: absolute; top: 4px; right: 4px; width: 8px; height: 8px; border-radius: 50%; background: #d08a2b; }
+
+/* Object editing */
+.pane-presentation .slide .slide-object { cursor: move; }
+.slide-object.is-dragging { opacity: .85; }
+.handle { position: absolute; width: var(--hs); height: var(--hs); background: #fff; border: calc(var(--hs) / 5) solid var(--select); border-radius: 2px; z-index: 2; }
+.handle-nw, .handle-n, .handle-ne { top: calc(var(--hs) / -2); }
+.handle-sw, .handle-s, .handle-se { bottom: calc(var(--hs) / -2); }
+.handle-e, .handle-w { top: calc(50% - var(--hs) / 2); }
+.handle-n, .handle-s { left: calc(50% - var(--hs) / 2); }
+.handle-nw, .handle-w, .handle-sw { left: calc(var(--hs) / -2); }
+.handle-ne, .handle-e, .handle-se { right: calc(var(--hs) / -2); }
+.handle-nw, .handle-se { cursor: nwse-resize; }
+.handle-ne, .handle-sw { cursor: nesw-resize; }
+.handle-n, .handle-s { cursor: ns-resize; }
+.handle-e, .handle-w { cursor: ew-resize; }
+.obj-text { white-space: pre-wrap; word-break: break-word; }
+.obj-text-editor { width: 100%; height: 100%; resize: none; border: none; outline: none; padding: 0; margin: 0; background: rgba(43,111,214,.04); font-family: inherit; line-height: 1.2; color: var(--text); }
+.obj-image { width: 100%; height: 100%; object-fit: contain; display: block; user-select: none; }
+
+/* Toolbars */
+.slidebar { display: flex; align-items: center; gap: 6px; height: 40px; padding: 0 10px; background: var(--panel); border-bottom: 1px solid var(--border); flex: none; font-size: 12px; overflow: hidden; }
+.slidebar button, .objectbar button { height: 26px; font-size: 12px; padding: 0 8px; }
+.toolbar-sep { width: 1px; height: 18px; background: var(--border); margin: 0 2px; flex: none; }
+.color-input { width: 26px; height: 26px; padding: 2px; border: 1px solid var(--border-strong); border-radius: 4px; background: #fff; cursor: pointer; flex: none; }
+.btn-icon { min-width: 26px; padding: 0 6px !important; }
+.btn-on { background: var(--accent-soft) !important; border-color: var(--accent) !important; color: var(--accent); }
+
+/* Thumbnails drag to reorder */
+.thumb.is-drop-target { border-left-color: var(--select); box-shadow: -4px 0 0 var(--select); }
+
+/* Presentation mode */
+.present { position: fixed; inset: 0; z-index: 100; background: #0b0d10; display: flex; align-items: center; justify-content: center; cursor: none; }
+.present.show-cursor { cursor: default; }
+.present .slide-frame { box-shadow: none; }
+.present-counter { position: absolute; right: 20px; bottom: 14px; color: rgba(255,255,255,.45); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+/* Handles and selection outlines may sit on the slide edge: don't clip them while editing. */
+.canvas .slide { overflow: visible; }

@@ -4,9 +4,10 @@ interface Props {
   onRename(name: string): void
   onNew(): void
   onSave(): void
+  onPresent(): void
 }
 
-export function TopBar({ name, status, onRename, onNew, onSave }: Props) {
+export function TopBar({ name, status, onRename, onNew, onSave, onPresent }: Props) {
   return (
     <header className="topbar">
       <span className="wordmark">Frame</span>
@@ -26,7 +27,9 @@ export function TopBar({ name, status, onRename, onNew, onSave }: Props) {
         <button disabled title="Open from a file arrives with local file persistence (Days 21–24)">Open</button>
         <button onClick={onSave} data-testid="save" title="Save (Ctrl+S)">Save</button>
       </div>
-      <button className="btn-primary" disabled title="Presentation mode arrives in Days 15–20">Present</button>
+      <button className="btn-primary" onClick={onPresent} data-testid="present-button" title="Present from this slide (Esc to exit)">
+        Present
+      </button>
     </header>
   )
 }
