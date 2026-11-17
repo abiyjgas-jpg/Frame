@@ -37,6 +37,9 @@ export async function freshStart(page: Page) {
   await page.evaluate(() => localStorage.clear())
   await page.reload()
   await expect(page.getByTestId('thumb-slide-2')).toBeVisible()
+  // Univer finishes mounting (and takes keyboard focus) a moment after first paint; wait until it
+  // accepts a click so later focus-sensitive steps aren't raced.
+  await selectCells(page, 'G20')
 }
 
 export async function openSlide(page: Page, id: string) {

@@ -17,6 +17,16 @@ export interface SlideObject {
   bindingId?: string
   /** Text content (text) or label (kpi, chart title). */
   text?: string
+  /** Image objects: id of an entry in FrameProject.assets. */
+  assetId?: string
+}
+
+/** Embedded file (images). Stored as a data URL so a project stays a single JSON file. */
+export interface Asset {
+  id: string
+  name: string
+  mime: string
+  dataUrl: string
 }
 
 export interface Slide {

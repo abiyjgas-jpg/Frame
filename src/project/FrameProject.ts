@@ -1,5 +1,5 @@
 import type { Binding } from '../bindings/types'
-import type { Slide } from '../presentation/types'
+import type { Asset, Slide } from '../presentation/types'
 
 export const FRAME_PROJECT_VERSION = 1
 
@@ -10,7 +10,7 @@ export interface FrameProject {
   workbook: unknown
   slides: Slide[]
   bindings: Binding[]
-  assets: unknown[]
+  assets: Asset[]
 }
 
 export function serializeProject(p: FrameProject): string {
@@ -46,7 +46,9 @@ export function deserializeProject(json: string): FrameProject {
     workbook: raw.workbook,
     slides: slides.map((s: any) => ({ title: '', ...s, objects: s.objects.map((o: any) => ({ style: {}, ...o, slideId: s.id })) })),
     bindings: raw.bindings,
-    assets: Array.isArray(raw.assets) ? raw.assets : [],
+    assets: (Array.isArray(raw.assets) ? raw.assets : []).filter(
+      (a: any) => a && typeof a.id === 'string' && typeof a.dataUrl === 'string' && a.dataUrl.startsWith('data:image/'),
+    ),
   }
 }
 
