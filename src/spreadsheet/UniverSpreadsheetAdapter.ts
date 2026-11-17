@@ -13,6 +13,14 @@ type UniverAPI = ReturnType<typeof createUniver>['univerAPI']
  * If no pass arrives (e.g. a style-only change), held changes are released after this long.
  */
 const MAX_HOLD_MS = 400
+/**
+ * A user-level command (CommandType.COMMAND) that changes the workbook. Loading a workbook and
+ * formula passes only run mutations, so they never count as edits. Navigation commands are excluded.
+ */
+const COMMAND = 0
+const NOT_AN_EDIT = /(select|activate|zoom|scroll)/
+const isEditCommand = (id: string) =>
+  (id.startsWith('sheet.command.') && !NOT_AN_EDIT.test(id)) || id === 'univer.command.undo' || id === 'univer.command.redo'
 type IWorkbookData = Parameters<UniverAPI['createWorkbook']>[0]
 
 /** All Univer-specific code lives in this file. */
@@ -21,6 +29,7 @@ export class UniverSpreadsheetAdapter implements SpreadsheetAdapter {
   private api: UniverAPI
   private listeners = new Set<(changes: RangeChange[]) => void>()
   private selectionListeners = new Set<(s: Selection | null) => void>()
+  private editListeners = new Set<() => void>()
   private disposables: { dispose(): void }[] = []
   private held: RangeChange[] = []
   private holdTimer: ReturnType<typeof setTimeout> | null = null
@@ -50,7 +59,8 @@ export class UniverSpreadsheetAdapter implements SpreadsheetAdapter {
     this.disposables.push(
       // The SelectionChanged facade event does not fire for pointer selection in 1.0.3; the
       // set-selections operation does (mouse, keyboard and selectRange), and survives workbook reloads.
-      this.api.addEvent(this.api.Event.CommandExecuted, ({ id }) => {
+      this.api.addEvent(this.api.Event.CommandExecuted, ({ id, type }) => {
+        if (type === COMMAND && isEditCommand(id)) for (const l of this.editListeners) l()
         if (id !== 'sheet.operation.set-selections') return
         const sel = this.getSelection()
         for (const l of this.selectionListeners) l(sel)
@@ -119,6 +129,11 @@ export class UniverSpreadsheetAdapter implements SpreadsheetAdapter {
     return () => void this.listeners.delete(listener)
   }
 
+  subscribeToEdits(listener: () => void) {
+    this.editListeners.add(listener)
+    return () => void this.editListeners.delete(listener)
+  }
+
   getSheets(): SheetInfo[] {
     return this.wb().getSheets().map((s) => ({ id: s.getSheetId(), name: s.getSheetName() }))
   }
@@ -152,6 +167,7 @@ export class UniverSpreadsheetAdapter implements SpreadsheetAdapter {
     this.disposables.forEach((d) => d.dispose())
     this.listeners.clear()
     this.selectionListeners.clear()
+    this.editListeners.clear()
     this.univer.dispose()
   }
 }

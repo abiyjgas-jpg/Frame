@@ -9,7 +9,7 @@ test('model and presentation are both visible side by side at 1440x900', async (
   expect(model.width).toBeGreaterThan(600)
   expect(pres.width).toBeGreaterThan(600)
   expect(model.x + model.width).toBeLessThanOrEqual(pres.x + 1)
-  for (const name of ['New', 'Open', 'Save', 'Present']) await expect(page.getByRole('button', { name, exact: true })).toBeVisible()
+  for (const name of ['New', 'Open…', 'Save', 'Save As…', 'Present']) await expect(page.getByRole('button', { name, exact: true })).toBeVisible()
   await expect(page.getByTestId('project-name')).toHaveValue('Untitled analysis')
   await expect(page.getByRole('tab', { name: 'Model' })).toBeVisible() // Univer's sheet tabs
   await page.screenshot({ path: 'docs/screenshots/shell.png' })
