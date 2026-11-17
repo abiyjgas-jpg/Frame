@@ -37,6 +37,8 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--select
 .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; margin-left: 4px; }
 .btn-primary:hover:not(:disabled) { background: #284f76; }
 .btn-primary:disabled { background: #9bb0c6; border-color: #9bb0c6; color: #fff; }
+.topbar-demo { border-color: transparent; color: var(--muted); margin-left: 4px; }
+.topbar-demo:hover { border-color: var(--border); color: var(--text); }
 
 /* Split */
 .split { flex: 1; display: grid; min-height: 0; position: relative; }
@@ -87,7 +89,7 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--select
 .obj-table td.is-num { text-align: right; }
 .obj-table tr.is-header td { font-weight: 600; color: #3b4452; border-bottom: 2px solid #3b4452; text-align: right; }
 .obj-table tr.is-header td:first-child { text-align: left; }
-.obj-table td.is-label { font-weight: 500; }
+.obj-table td.is-label { font-weight: 500; width: 38%; }
 .obj-table tr:last-child td { border-bottom: none; }
 
 /* Add to presentation, linked highlighting */

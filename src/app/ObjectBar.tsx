@@ -1,3 +1,4 @@
+import { REF_ERROR } from '../bindings/range'
 import type { Binding } from '../bindings/types'
 import type { Align } from '../presentation/deck'
 import type { ChartKind } from '../presentation/objects/LinkedChart'
@@ -68,7 +69,7 @@ export function ObjectBar(p: Props) {
             <code className="objectbar-source" data-testid="source" title="Source">
               {p.sheetName(binding.source.sheetId)}!{binding.source.range}
             </code>
-            <button data-testid="goto-source" onClick={() => p.onGoToSource(binding)}>
+            <button data-testid="goto-source" disabled={binding.source.range === REF_ERROR} onClick={() => p.onGoToSource(binding)}>
               Go to source
             </button>
           </>

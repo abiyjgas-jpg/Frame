@@ -5,13 +5,14 @@ interface Props {
   fileName: string | null
   onRename(name: string): void
   onNew(): void
+  onOpenDemo(): void
   onOpen(): void
   onSave(): void
   onSaveAs(): void
   onPresent(): void
 }
 
-export function TopBar({ name, status, dirty, fileName, onRename, onNew, onOpen, onSave, onSaveAs, onPresent }: Props) {
+export function TopBar({ name, status, dirty, fileName, onRename, onNew, onOpenDemo, onOpen, onSave, onSaveAs, onPresent }: Props) {
   return (
     <header className="topbar">
       <span className="wordmark">Frame</span>
@@ -42,6 +43,9 @@ export function TopBar({ name, status, dirty, fileName, onRename, onNew, onOpen,
         <button onClick={onSave} data-testid="save" title="Save (Ctrl+S)">Save</button>
         <button onClick={onSaveAs} data-testid="save-as" title="Save to a new file (Ctrl+Shift+S)">Save As…</button>
       </div>
+      <button className="topbar-demo" onClick={onOpenDemo} data-testid="open-demo" title="Open a fresh copy of the FY27 Operating Plan demo">
+        Demo
+      </button>
       <button className="btn-primary" onClick={onPresent} data-testid="present-button" title="Present from this slide (Esc to exit)">
         Present
       </button>

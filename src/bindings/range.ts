@@ -47,3 +47,43 @@ export function formatRange(r: Rect): string {
 export function intersects(a: Rect, b: Rect): boolean {
   return a.startRow <= b.endRow && b.startRow <= a.endRow && a.startCol <= b.endCol && b.startCol <= a.endCol
 }
+
+/** What a binding's source becomes when every cell it read has been deleted (as Excel shows it). */
+export const REF_ERROR = '#REF!'
+
+/** Rows or columns inserted or removed in a sheet. `start` is 0-based; inserts go before `start`. */
+export interface StructureChange {
+  sheetId: string
+  axis: 'row' | 'col'
+  kind: 'insert' | 'remove'
+  start: number
+  count: number
+}
+
+/**
+ * Where a range ends up after rows or columns are inserted or removed, the way a spreadsheet moves
+ * a formula's reference: inserting inside the range grows it, removing part of it shrinks it, and
+ * removing all of it returns REF_ERROR.
+ */
+export function shiftRange(range: string, change: StructureChange): string {
+  if (range === REF_ERROR) return range
+  const r = parseRange(range)
+  const [lo, hi] = change.axis === 'row' ? [r.startRow, r.endRow] : [r.startCol, r.endCol]
+  let s = lo
+  let e = hi
+  const { start, count } = change
+  if (change.kind === 'insert') {
+    if (start <= lo) {
+      s += count
+      e += count
+    } else if (start <= hi) {
+      e += count
+    }
+  } else {
+    const end = start + count - 1
+    s = lo < start ? lo : lo > end ? lo - count : start
+    e = hi < start ? hi : hi > end ? hi - count : start - 1
+    if (e < s) return REF_ERROR
+  }
+  return formatRange(change.axis === 'row' ? { ...r, startRow: s, endRow: e } : { ...r, startCol: s, endCol: e })
+}

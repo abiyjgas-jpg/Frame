@@ -2,6 +2,7 @@ import { UniverSheetsCorePreset } from '@univerjs/preset-sheets-core'
 import UniverPresetSheetsCoreEnUS from '@univerjs/preset-sheets-core/locales/en-US'
 import { createUniver, LocaleType, mergeLocales } from '@univerjs/presets'
 import '@univerjs/preset-sheets-core/lib/index.css'
+import type { StructureChange } from '../bindings/range'
 import type { CellValue, RangeChange, Selection, SheetInfo, SpreadsheetAdapter } from './SpreadsheetAdapter'
 
 type UniverAPI = ReturnType<typeof createUniver>['univerAPI']
@@ -19,6 +20,14 @@ const MAX_HOLD_MS = 400
  */
 const COMMAND = 0
 const NOT_AN_EDIT = /(select|activate|zoom|scroll)/
+const MUTATION = 2
+/** Row/column mutations. Undo and redo run these too, so references stay right both ways. */
+const STRUCTURE: Record<string, Pick<StructureChange, 'axis' | 'kind'>> = {
+  'sheet.mutation.insert-row': { axis: 'row', kind: 'insert' },
+  'sheet.mutation.remove-rows': { axis: 'row', kind: 'remove' },
+  'sheet.mutation.insert-col': { axis: 'col', kind: 'insert' },
+  'sheet.mutation.remove-col': { axis: 'col', kind: 'remove' },
+}
 const isEditCommand = (id: string) =>
   (id.startsWith('sheet.command.') && !NOT_AN_EDIT.test(id)) || id === 'univer.command.undo' || id === 'univer.command.redo'
 type IWorkbookData = Parameters<UniverAPI['createWorkbook']>[0]
@@ -30,6 +39,7 @@ export class UniverSpreadsheetAdapter implements SpreadsheetAdapter {
   private listeners = new Set<(changes: RangeChange[]) => void>()
   private selectionListeners = new Set<(s: Selection | null) => void>()
   private editListeners = new Set<() => void>()
+  private structureListeners = new Set<(c: StructureChange) => void>()
   private disposables: { dispose(): void }[] = []
   private held: RangeChange[] = []
   private holdTimer: ReturnType<typeof setTimeout> | null = null
@@ -59,8 +69,9 @@ export class UniverSpreadsheetAdapter implements SpreadsheetAdapter {
     this.disposables.push(
       // The SelectionChanged facade event does not fire for pointer selection in 1.0.3; the
       // set-selections operation does (mouse, keyboard and selectRange), and survives workbook reloads.
-      this.api.addEvent(this.api.Event.CommandExecuted, ({ id, type }) => {
+      this.api.addEvent(this.api.Event.CommandExecuted, ({ id, type, params }) => {
         if (type === COMMAND && isEditCommand(id)) for (const l of this.editListeners) l()
+        if (type === MUTATION && STRUCTURE[id]) this.emitStructure(STRUCTURE[id], params as any)
         if (id !== 'sheet.operation.set-selections') return
         const sel = this.getSelection()
         for (const l of this.selectionListeners) l(sel)
@@ -76,6 +87,12 @@ export class UniverSpreadsheetAdapter implements SpreadsheetAdapter {
         if (changes.length) this.emit(changes)
       }),
     )
+  }
+
+  private emitStructure(op: Pick<StructureChange, 'axis' | 'kind'>, p: { subUnitId: string; range: { startRow: number; endRow: number; startColumn: number; endColumn: number } }) {
+    const [start, end] = op.axis === 'row' ? [p.range.startRow, p.range.endRow] : [p.range.startColumn, p.range.endColumn]
+    const change: StructureChange = { sheetId: p.subUnitId, ...op, start, count: end - start + 1 }
+    for (const l of this.structureListeners) l(change)
   }
 
   private hold(changes: RangeChange[]) {
@@ -112,7 +129,8 @@ export class UniverSpreadsheetAdapter implements SpreadsheetAdapter {
   }
 
   getRangeValues(sheetId: string, range: string): CellValue[][] {
-    return this.sheet(sheetId).getRange(range).getValues() as CellValue[][]
+    // getValues() returns formatted text for cells with a number format ("12.0%"); raw values are the numbers.
+    return this.sheet(sheetId).getRange(range).getRawValues() as CellValue[][]
   }
 
   getRangeDisplayValues(sheetId: string, range: string): string[][] {
@@ -132,6 +150,11 @@ export class UniverSpreadsheetAdapter implements SpreadsheetAdapter {
   subscribeToEdits(listener: () => void) {
     this.editListeners.add(listener)
     return () => void this.editListeners.delete(listener)
+  }
+
+  subscribeToStructure(listener: (c: StructureChange) => void) {
+    this.structureListeners.add(listener)
+    return () => void this.structureListeners.delete(listener)
   }
 
   getSheets(): SheetInfo[] {
@@ -168,6 +191,7 @@ export class UniverSpreadsheetAdapter implements SpreadsheetAdapter {
     this.listeners.clear()
     this.selectionListeners.clear()
     this.editListeners.clear()
+    this.structureListeners.clear()
     this.univer.dispose()
   }
 }
