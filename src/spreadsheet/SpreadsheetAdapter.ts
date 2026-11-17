@@ -1,3 +1,4 @@
+import type { StructureChange } from '../bindings/range'
 /**
  * The only spreadsheet surface the rest of Frame may use.
  * Ranges are A1 strings scoped to a sheet id; values are plain JS scalars.
@@ -29,6 +30,8 @@ export interface SpreadsheetAdapter {
   subscribeToChanges(listener: (changes: RangeChange[]) => void): () => void
   /** Called when the user changes the workbook (values, formats, structure, undo). Not on load. */
   subscribeToEdits(listener: () => void): () => void
+  /** Called when rows or columns are inserted or removed (including by undo/redo). */
+  subscribeToStructure(listener: (change: StructureChange) => void): () => void
   getSheets(): SheetInfo[]
   getSelection(): Selection | null
   subscribeToSelection(listener: (selection: Selection | null) => void): () => void

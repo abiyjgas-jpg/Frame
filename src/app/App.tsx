@@ -3,6 +3,7 @@ import { BindingManager, type BindingValues } from '../bindings/BindingManager'
 import { formatRange, parseRange } from '../bindings/range'
 import type { Binding } from '../bindings/types'
 import { SplitPane } from '../components/SplitPane'
+import { createDemoProject } from '../demo/fy27Demo'
 import { createStarterProject } from '../demo/spikeProject'
 import {
   BINDING_TYPE,
@@ -101,7 +102,8 @@ export function App() {
 
   useEffect(() => {
     const restored = loadWorkspace()
-    const project = restored?.project ?? createStarterProject()
+    // First run opens the demo. Browser tests ask for the spike's small starter project instead.
+    const project = restored?.project ?? ((window as any).__FRAME_FIXTURE__ === 'spike' ? createStarterProject() : createDemoProject())
     const a = new UniverSpreadsheetAdapter(sheetHost.current!, project.workbook as any)
     const m = new BindingManager(a)
     adapter.current = a
@@ -110,12 +112,15 @@ export function App() {
     const unsub = m.subscribe(setValues)
     const unsubSel = a.subscribeToSelection(setSheetSelection)
     const unsubEdits = a.subscribeToEdits(() => setSheetRev((r) => r + 1))
+    // Inserting or deleting rows/columns moves linked sources with their cells.
+    const unsubMoved = m.onSourcesMoved(() => setBindingList(m.list()))
     show(project, { file: restored?.fileName ? { name: restored.fileName } : null, dirty: restored?.dirty ?? false })
     window.__frame = { adapter: a, bindings: m, slides: () => slidesRef.current }
     return () => {
       unsub()
       unsubSel()
       unsubEdits()
+      unsubMoved()
       m.detach()
       a.dispose()
     }
@@ -231,13 +236,14 @@ export function App() {
     }
   }
 
-  const newProject = () => {
-    if (dirty && !window.confirm('Start a new project? Unsaved changes in this one will be lost.')) return
-    const p = createBlankProject()
+  const replaceWith = (p: FrameProject, question: string, message: string) => {
+    if (dirty && !window.confirm(question)) return
     adapter.current!.loadSnapshot(p.workbook)
     show(p, { file: null, dirty: false })
-    setStatus('New project')
+    setStatus(message)
   }
+  const newProject = () => replaceWith(createBlankProject(), 'Start a new project? Unsaved changes in this one will be lost.', 'New project')
+  const openDemo = () => replaceWith(createDemoProject(), 'Open the demo? Unsaved changes in this project will be lost.', 'Opened the demo')
 
   // --- bindings kept in step with slide edits -------------------------------------------------
   const syncBindings = (removed: string[], added: Binding[] = []) => {
@@ -409,6 +415,7 @@ export function App() {
         fileName={file?.name ?? null}
         onRename={setName}
         onNew={newProject}
+        onOpenDemo={openDemo}
         onOpen={() => void open()}
         onSave={() => void save(false)}
         onSaveAs={() => void save(true)}

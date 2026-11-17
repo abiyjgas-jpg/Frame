@@ -102,3 +102,32 @@ describe('BindingManager', () => {
     expect(m.getValues(b.id)?.values).toEqual([[100]])
   })
 })
+
+describe('BindingManager: rows and columns inserted or removed', () => {
+  it('moves sources with their cells, re-reads them, and reports which moved', async () => {
+    const sheet = new FakeSheet()
+    const m = new BindingManager(sheet, (fn) => fn())
+    m.attach()
+    sheet.set('s1', 2, 0, 42)
+    const kpi = m.create('cell-kpi', { sheetId: 's1', range: 'A2' }, { slideId: 'sl', objectId: 'k' })
+    const other = m.create('range-chart', { sheetId: 's2', range: 'A1:A3' }, { slideId: 'sl', objectId: 'c' })
+    const moved: string[][] = []
+    m.onSourcesMoved((ids) => moved.push(ids))
+
+    // A row is inserted above: the value now lives in A3.
+    sheet.structureListeners.forEach((l) => l({ sheetId: 's1', axis: 'row', kind: 'insert', start: 0, count: 1 }))
+    expect(m.list().find((b) => b.id === kpi.id)!.source.range).toBe('A3')
+    expect(m.list().find((b) => b.id === other.id)!.source.range).toBe('A1:A3')
+    expect(m.getValues(kpi.id)!.values).toEqual([[42]])
+    expect(moved).toEqual([[kpi.id]])
+
+    // Its row is deleted: #REF!, empty values, and nothing throws when looking it up.
+    sheet.structureListeners.forEach((l) => l({ sheetId: 's1', axis: 'row', kind: 'remove', start: 2, count: 1 }))
+    expect(m.list().find((b) => b.id === kpi.id)!.source.range).toBe('#REF!')
+    expect(m.getValues(kpi.id)).toEqual({ values: [], display: [] })
+    expect(m.bindingsForRange('s1', 'A1:Z99')).toEqual([])
+    expect(m.affectedBy([{ sheetId: 's1', ranges: [] }])).toEqual([])
+    // A copy of a deleted-source object can still be made.
+    expect(() => m.create('cell-kpi', { sheetId: 's1', range: '#REF!' }, { slideId: 'sl', objectId: 'k2' })).not.toThrow()
+  })
+})

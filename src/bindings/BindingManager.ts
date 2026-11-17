@@ -1,5 +1,5 @@
 import type { CellValue, RangeChange, SpreadsheetAdapter } from '../spreadsheet/SpreadsheetAdapter'
-import { intersects, parseRange } from './range'
+import { intersects, parseRange, REF_ERROR, shiftRange, type Rect, type StructureChange } from './range'
 import type { Binding, BindingType } from './types'
 
 /** A binding's current source data: raw values (for charts) and formatted text (for KPIs and tables). */
@@ -12,6 +12,9 @@ export type BindingValues = Map<string, ResolvedRange>
 type Listener = (values: BindingValues) => void
 
 let counter = 0
+/** A binding's source rectangle, or null if its cells were deleted. */
+const sourceRect = (b: Binding): Rect | null => (b.source.range === REF_ERROR ? null : parseRange(b.source.range))
+
 const newId = () => `binding_${Date.now().toString(36)}_${(counter++).toString(36)}`
 
 /**
@@ -23,6 +26,7 @@ export class BindingManager {
   private values: BindingValues = new Map()
   private listeners = new Set<Listener>()
   private unsubscribe: (() => void) | null = null
+  private unsubscribeStructure: (() => void) | null = null
   private pending: RangeChange[] = []
   private scheduled = false
 
@@ -36,17 +40,22 @@ export class BindingManager {
     this.unsubscribe?.()
     this.sheet = sheet
     this.unsubscribe = sheet.subscribeToChanges((c) => this.onChanges(c))
+    this.unsubscribeStructure?.()
+    this.unsubscribeStructure = sheet.subscribeToStructure((c) => this.onStructure(c))
     this.refresh([...this.bindings.keys()])
   }
 
   detach() {
     this.unsubscribe?.()
     this.unsubscribe = null
+    this.unsubscribeStructure?.()
+    this.unsubscribeStructure = null
   }
 
   create(type: BindingType, source: Binding['source'], target: Binding['target'], id = newId()): Binding {
-    parseRange(source.range) // validate
-    if (type === 'cell-kpi') {
+    // Validate. A copy of an object whose cells were deleted keeps the #REF! source.
+    if (source.range !== REF_ERROR) parseRange(source.range)
+    if (type === 'cell-kpi' && source.range !== REF_ERROR) {
       const r = parseRange(source.range)
       if (r.startRow !== r.endRow || r.startCol !== r.endCol) throw new Error('KPI bindings need a single cell')
     }
@@ -87,7 +96,8 @@ export class BindingManager {
   affectedBy(changes: RangeChange[]): string[] {
     const hit = new Set<string>()
     for (const b of this.bindings.values()) {
-      const src = parseRange(b.source.range)
+      const src = sourceRect(b)
+      if (!src) continue
       for (const c of changes) {
         if (c.sheetId !== b.source.sheetId) continue
         if (c.ranges.length === 0 || c.ranges.some((r) => intersects(src, parseRange(r)))) hit.add(b.id)
@@ -99,7 +109,42 @@ export class BindingManager {
   /** Bindings whose source overlaps a range (used for reverse highlighting later). */
   bindingsForRange(sheetId: string, range: string): Binding[] {
     const r = parseRange(range)
-    return this.list().filter((b) => b.source.sheetId === sheetId && intersects(r, parseRange(b.source.range)))
+    return this.list().filter((b) => {
+      const src = b.source.sheetId === sheetId && sourceRect(b)
+      return !!src && intersects(r, src)
+    })
+  }
+
+  /**
+   * Rows or columns were inserted or removed: move binding sources with their cells, as a formula's
+   * references would move. Returns the ids of bindings whose source changed.
+   */
+  applyStructureChange(change: StructureChange): string[] {
+    const moved: string[] = []
+    for (const b of this.bindings.values()) {
+      if (b.source.sheetId !== change.sheetId) continue
+      const range = shiftRange(b.source.range, change)
+      if (range !== b.source.range) {
+        this.bindings.set(b.id, { ...b, source: { ...b.source, range } })
+        moved.push(b.id)
+      }
+    }
+    return moved
+  }
+
+  private onStructure(change: StructureChange) {
+    const moved = this.applyStructureChange(change)
+    if (moved.length) {
+      this.refresh(moved)
+      for (const l of this.structureListeners) l(moved)
+    }
+  }
+
+  private structureListeners = new Set<(ids: string[]) => void>()
+  /** Called with binding ids whose source moved because rows or columns were inserted or removed. */
+  onSourcesMoved(l: (ids: string[]) => void) {
+    this.structureListeners.add(l)
+    return () => void this.structureListeners.delete(l)
   }
 
   private onChanges(changes: RangeChange[]) {
@@ -121,12 +166,13 @@ export class BindingManager {
       if (!b) continue
       let next: ResolvedRange
       try {
+        if (b.source.range === REF_ERROR) throw new Error('source deleted')
         next = {
           values: this.sheet.getRangeValues(b.source.sheetId, b.source.range),
           display: this.sheet.getRangeDisplayValues(b.source.sheetId, b.source.range),
         }
       } catch {
-        next = { values: [], display: [] } // source sheet missing: render empty rather than crash
+        next = { values: [], display: [] } // source sheet or cells missing: render empty rather than crash
       }
       if (JSON.stringify(next) !== JSON.stringify(this.values.get(id))) {
         this.values.set(id, next)

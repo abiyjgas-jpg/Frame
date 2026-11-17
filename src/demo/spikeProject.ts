@@ -1,8 +1,8 @@
 import { FRAME_PROJECT_VERSION, type FrameProject } from '../project/FrameProject'
 
 /**
- * Starter project until the FY27 Operating Plan demo lands (Days 25–27):
- * the spike's sheet plus two slides, one with a live KPI and chart.
+ * The spike's small starter project: one sheet plus two slides, one with a live KPI and chart.
+ * Browser tests use it as a fixture; users get the FY27 Operating Plan demo (fy27Demo.ts).
  */
 export function createStarterProject(): FrameProject {
   return {

@@ -1,4 +1,4 @@
-import { parseRange } from '../src/bindings/range'
+import { parseRange, type StructureChange } from '../src/bindings/range'
 import type { CellValue, RangeChange, Selection, SpreadsheetAdapter } from '../src/spreadsheet/SpreadsheetAdapter'
 
 /** In-memory adapter for testing Frame logic without Univer. */
@@ -38,6 +38,11 @@ export class FakeSheet implements SpreadsheetAdapter {
   subscribeToChanges(l: (c: RangeChange[]) => void) {
     this.listeners.add(l)
     return () => void this.listeners.delete(l)
+  }
+  structureListeners = new Set<(c: StructureChange) => void>()
+  subscribeToStructure(l: (c: StructureChange) => void) {
+    this.structureListeners.add(l)
+    return () => void this.structureListeners.delete(l)
   }
   subscribeToEdits(_l: () => void) {
     return () => {}

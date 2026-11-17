@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import type { BindingValues } from '../../bindings/BindingManager'
-import { parseRange } from '../../bindings/range'
+import { parseRange, REF_ERROR } from '../../bindings/range'
 import type { Binding } from '../../bindings/types'
 import { rangeToChartData } from '../chartData'
 import { inferNumberFormat } from '../numberFormat'
@@ -19,10 +19,16 @@ interface Props {
 export function ObjectView({ object, binding, values, assets }: Props) {
   const data = object.bindingId ? values.get(object.bindingId) : undefined
   const chartData = useMemo(
-    () => (object.type === 'chart' && binding && data ? rangeToChartData(data.values, parseRange(binding.source.range)) : null),
+    () => (object.type === 'chart' && binding && data && binding.source.range !== REF_ERROR ? rangeToChartData(data.values, parseRange(binding.source.range)) : null),
     [object.type, binding, data],
   )
   const format = useMemo(() => (object.type === 'chart' && data ? inferNumberFormat(data.values, data.display) : undefined), [object.type, data])
+  if (binding?.source.range === REF_ERROR)
+    return (
+      <div className="obj-placeholder" data-testid="source-deleted">
+        The cells this {object.type === 'kpi' ? 'KPI' : object.type} showed were deleted
+      </div>
+    )
   switch (object.type) {
     case 'text':
       return (

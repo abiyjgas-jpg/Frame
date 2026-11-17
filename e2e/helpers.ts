@@ -38,8 +38,9 @@ export const chartValues = async (page: Page) => JSON.parse((await canvasChart(p
  * window.__nextSaveName / __nextOpenName and read window.__pickerCalls; deleting
  * window.showSaveFilePicker / showOpenFilePicker switches the app to its download/upload fallback.
  */
-function installFakeDisk() {
+function installFakeDisk(fixture: string) {
   const w = window as any
+  w.__FRAME_FIXTURE__ = fixture
   w.__pickerCalls = 0
   const read = (n: string) => sessionStorage.getItem('disk:' + n)
   const handle = (name: string) => ({
@@ -69,18 +70,20 @@ function installFakeDisk() {
 
 const withDisk = new WeakSet<Page>()
 
-export async function freshStart(page: Page) {
+/** Starts from an empty browser with the spike's starter project, or the FY27 demo. */
+export async function freshStart(page: Page, fixture: 'spike' | 'demo' = 'spike') {
   if (!withDisk.has(page)) {
     withDisk.add(page)
-    await page.addInitScript(installFakeDisk)
+    await page.addInitScript(installFakeDisk, fixture)
   }
   await page.goto('/')
   await page.evaluate(() => localStorage.clear())
   await page.reload()
-  await expect(page.getByTestId('thumb-slide-2')).toBeVisible()
+  await expect(page.getByTestId(fixture === 'spike' ? 'thumb-slide-2' : 'thumb-slide-headcount')).toBeVisible()
   // Univer finishes mounting (and takes keyboard focus) a moment after first paint; wait until it
-  // accepts a click so later focus-sensitive steps aren't raced.
-  await selectCells(page, 'G20')
+  // accepts a click so later focus-sensitive steps aren't raced. (The demo's column A is wide, so
+  // its G20 sits elsewhere; A20 is under the same point in both.)
+  await selectCells(page, fixture === 'spike' ? 'G20' : 'A20')
 }
 
 export async function openSlide(page: Page, id: string) {
