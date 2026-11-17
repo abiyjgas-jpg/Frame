@@ -1,14 +1,16 @@
 {
   "name": "frame",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "start": "npm run build && vite preview --open",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "licenses": "node scripts/third-party-licenses.mjs"
   },
   "dependencies": {
     "@univerjs/preset-sheets-core": "1.0.3",
@@ -25,5 +27,8 @@
     "typescript": "^7.0.2",
     "vite": "^8.3.3",
     "vitest": "^5.0.3"
+  },
+  "engines": {
+    "node": ">=20.19"
   }
 }
